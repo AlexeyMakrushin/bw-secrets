@@ -89,23 +89,50 @@ GOOGLE_API_KEY=$(bw-get google api-key)
 # 1. Клонировать/создать проект
 cd ~/.secrets
 
-# 2. Установить через uv
-uv pip install -e .
+# 2. Установить зависимости через uv
+uv sync
 
-# 3. Настроить Bitwarden
-bw login your-email@example.com
+# 3. Добавить алиасы в ~/.zshrc (или ~/.bashrc)
+cat >> ~/.zshrc << 'EOF'
+
+# Bitwarden secrets daemon
+alias bw-start='cd ~/.secrets && export BW_SESSION=$(bw unlock --raw) && ./scripts/start-daemon.sh &'
+alias bw-stop='pkill -f bw-secrets-daemon'
+EOF
+
+source ~/.zshrc
+
+# 4. Запустить демон
+bw-start
+# Введи мастер-пароль Bitwarden
+
+# 5. Проверить (в том же или другом терминале)
+cd ~/.secrets
+.venv/bin/bw-list
+.venv/bin/bw-get myrace password
+```
+
+## Автозапуск при загрузке системы (опционально)
+
+Для автоматического запуска демона при логине:
+
+```bash
+# 1. Сохранить BW_SESSION в macOS Keychain
 export BW_SESSION=$(bw unlock --raw)
+cd ~/.secrets
+./scripts/keychain-save-session.sh
 
-# 4. Запустить демон (тест)
-bw-secrets-daemon
-
-# 5. Проверить
-bw-get google password  # должен вернуть пароль
-
-# 6. Установить автозапуск
+# 2. Установить launchd агент
 cp launchd/com.amcr.bw-secrets.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.amcr.bw-secrets.plist
+
+# 3. Проверить
+sleep 2
+ls -la /tmp/bw-secrets.sock
+.venv/bin/bw-list
 ```
+
+Подробнее: [launchd/README.md](launchd/README.md)
 
 ## Структура проекта
 
