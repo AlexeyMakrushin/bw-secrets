@@ -42,6 +42,8 @@ async def handle_client(reader, writer):
 
 def process_request(request: str) -> str:
     """Обработать команду от клиента."""
+    global vault
+
     parts = request.split()
     if not parts:
         return "ERROR empty request"
@@ -88,7 +90,6 @@ def process_request(request: str) -> str:
 
     elif cmd == "RELOAD":
         try:
-            global vault
             session = get_session()
             vault = load_vault(session)
             return f"OK reloaded {len(vault)} items"
