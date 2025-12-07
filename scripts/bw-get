@@ -1,0 +1,5 @@
+#!/bin/bash
+# Shell wrapper for bw-get command
+# After installation via uv, use the bw-get command directly
+
+python3 -m bw_secrets.cli "$@"
