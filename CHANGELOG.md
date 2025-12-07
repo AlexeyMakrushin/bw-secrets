@@ -17,7 +17,15 @@
 - Unix socket с правами 600 для безопасности
 - Текстовый протокол для простоты отладки
 
+### Fixes
+- Исправлена SyntaxError в daemon.py (global vault declaration)
+- Создан скрипт start-daemon.sh для удобного запуска с BW_SESSION
+
+### Testing
+- Протестировано с реальным Bitwarden vault
+- bw-get успешно возвращает секреты
+- Демон запускается и работает корректно
+
 ### Next steps
-- Протестировать с реальным Bitwarden vault
 - Настроить автозапуск через launchd
 - Возможно добавить кэширование BW_SESSION в macOS Keychain
