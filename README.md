@@ -138,18 +138,25 @@ ls -la /tmp/bw-secrets.sock
 
 ```
 ~/.secrets/
-├── src/
-│   └── bw_secrets/
-│       ├── __init__.py        # Константы (SOCKET_PATH)
-│       ├── daemon.py          # Unix socket сервер (asyncio)
-│       ├── bitwarden.py       # Работа с bw CLI
-│       ├── client.py          # Python-клиент
-│       └── cli.py             # CLI команды
-├── scripts/
-│   └── bw-get                 # Shell-обёртка
-├── launchd/
-│   └── com.amcr.bw-secrets.plist
-├── pyproject.toml
+├── src/bw_secrets/            # Python пакет
+│   ├── __init__.py            # Экспорт API
+│   ├── daemon.py              # Unix socket сервер (asyncio)
+│   ├── bitwarden.py           # Работа с bw CLI
+│   ├── client.py              # Python клиент
+│   └── cli.py                 # CLI entry points
+├── scripts/                   # Shell скрипты
+│   ├── start-daemon.sh        # Ручной запуск демона
+│   ├── bw-launch              # Wrapper для launchd
+│   ├── keychain-save-session.sh
+│   └── keychain-get-session.sh
+├── launchd/                   # Автозапуск macOS
+│   ├── com.amcr.bw-secrets.plist
+│   └── README.md
+├── .claude/skills/            # Claude AI интеграция
+│   └── bw-secrets.md
+├── pyproject.toml             # Конфигурация пакета
+├── AGENTS.md                  # Архитектура
+├── CHANGELOG.md               # История изменений
 ├── CLAUDE.md                  # Инструкции для AI
 └── README.md
 ```

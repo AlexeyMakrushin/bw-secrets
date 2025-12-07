@@ -25,6 +25,8 @@ ENV/
 
 # macOS
 .DS_Store
+.AppleDouble
+.LSOverride
 
 # Project specific
 *.log

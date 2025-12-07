@@ -31,7 +31,7 @@
 - Созданы скрипты для работы с macOS Keychain:
   - keychain-save-session.sh - сохранить BW_SESSION
   - keychain-get-session.sh - получить BW_SESSION
-  - launchd-wrapper.sh - wrapper для автозапуска
+  - bw-launch - wrapper для автозапуска через launchd
 - Обновлён com.amcr.bw-secrets.plist для использования wrapper
 - Добавлена документация launchd/README.md
 
