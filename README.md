@@ -1,58 +1,38 @@
 # bw-secrets
 
-Демон для загрузки секретов из Bitwarden в память с доступом через Unix socket.
+Демон для безопасного доступа к секретам из Bitwarden. Загружает vault в память один раз — отдаёт секреты мгновенно.
 
-## Проблема
+## Зачем?
 
-1. **Секреты в .env файлах** — небезопасно, AI-агенты могут прочитать
-2. **Секреты в переменных окружения** — нужно загружать при каждом запуске терминала
-3. **Прямые вызовы `bw get`** — медленно (каждый раз расшифровка)
+- **Без .env файлов** — секреты не на диске, AI-агенты не прочитают случайно
+- **Быстро** — vault в памяти, не нужно каждый раз расшифровывать
+- **Просто** — `bw-get google password` вместо длинных команд bw
 
-## Решение
+## Быстрый старт
 
-Демон, который:
-- Загружает весь vault Bitwarden в память один раз при старте
-- Отдаёт секреты через Unix socket по запросу
-- Запускается автоматически при логине (launchd)
-- Не сохраняет секреты на диск
+```bash
+# 1. Клонировать и установить
+cd ~/.secrets
+uv sync
 
-## Архитектура
+# 2. Разблокировать Bitwarden и запустить демон
+export BW_SESSION=$(bw unlock --raw)
+.venv/bin/bw-secrets-daemon &
 
-```
-┌─────────────────────────────────────────────────────┐
-│                    macOS Login                       │
-└─────────────────┬───────────────────────────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────────────────────────┐
-│              launchd запускает демон                │
-│         (требует BW_SESSION в Keychain)             │
-└─────────────────┬───────────────────────────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────────────────────────┐
-│              bw-secrets-daemon (Python)             │
-│  ┌───────────────────────────────────────────────┐  │
-│  │     Память: весь vault Bitwarden (dict)       │  │
-│  │     {item_name: {field: value, ...}, ...}     │  │
-│  └───────────────────────────────────────────────┘  │
-│  ┌───────────────────────────────────────────────┐  │
-│  │  Unix Socket: /tmp/bw-secrets.sock            │  │
-│  │  (права 600 — только владелец)                │  │
-│  └───────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────┘
-                  │
-    ┌─────────────┼─────────────┐
-    ▼             ▼             ▼
-┌────────┐  ┌──────────┐  ┌──────────────┐
-│ Python │  │  Shell   │  │    Docker    │
-│  App   │  │  Script  │  │  (при запуске)│
-└────────┘  └──────────┘  └──────────────┘
+# 3. Готово! Проверить:
+.venv/bin/bw-list
+.venv/bin/bw-get google password
 ```
 
 ## Использование
 
-### Python-приложения
+### В shell-скриптах
+```bash
+PASSWORD=$(bw-get google password)
+API_KEY=$(bw-get openai api-key)
+```
+
+### В Python
 ```python
 from bw_secrets import get_secret
 
@@ -60,13 +40,7 @@ api_key = get_secret("openai", "api-key")
 password = get_secret("google", "password")
 ```
 
-### Shell-скрипты
-```bash
-PASSWORD=$(bw-get google password)
-API_KEY=$(bw-get openai api-key)
-```
-
-### Docker
+### В Docker
 ```bash
 docker run \
   -e OPENAI_API_KEY=$(bw-get openai api-key) \
@@ -74,91 +48,12 @@ docker run \
   myapp
 ```
 
-### Генерация переменных
+### Посмотреть доступные поля
 ```bash
-$ bw-suggest google
-
-GOOGLE_USERNAME=$(bw-get google username)
-GOOGLE_PASSWORD=$(bw-get google password)
-GOOGLE_API_KEY=$(bw-get google api-key)
-```
-
-## Установка
-
-```bash
-# 1. Клонировать/создать проект
-cd ~/.secrets
-
-# 2. Установить зависимости через uv
-uv sync
-
-# 3. Добавить алиасы в ~/.zshrc (или ~/.bashrc)
-cat >> ~/.zshrc << 'EOF'
-
-# Bitwarden secrets daemon
-alias bw-start='cd ~/.secrets && export BW_SESSION=$(bw unlock --raw) && ./scripts/start-daemon.sh &'
-alias bw-stop='pkill -f bw-secrets-daemon'
-EOF
-
-source ~/.zshrc
-
-# 4. Запустить демон
-bw-start
-# Введи мастер-пароль Bitwarden
-
-# 5. Проверить (в том же или другом терминале)
-cd ~/.secrets
-.venv/bin/bw-list
-.venv/bin/bw-get myrace password
-```
-
-## Автозапуск при загрузке системы (опционально)
-
-Для автоматического запуска демона при логине:
-
-```bash
-# 1. Сохранить BW_SESSION в macOS Keychain
-export BW_SESSION=$(bw unlock --raw)
-cd ~/.secrets
-./scripts/keychain-save-session.sh
-
-# 2. Установить launchd агент
-cp launchd/com.amcr.bw-secrets.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.amcr.bw-secrets.plist
-
-# 3. Проверить
-sleep 2
-ls -la /tmp/bw-secrets.sock
-.venv/bin/bw-list
-```
-
-Подробнее: [launchd/README.md](launchd/README.md)
-
-## Структура проекта
-
-```
-~/.secrets/
-├── src/bw_secrets/            # Python пакет
-│   ├── __init__.py            # Экспорт API
-│   ├── daemon.py              # Unix socket сервер (asyncio)
-│   ├── bitwarden.py           # Работа с bw CLI
-│   ├── client.py              # Python клиент
-│   └── cli.py                 # CLI entry points
-├── scripts/                   # Shell скрипты
-│   ├── start-daemon.sh        # Ручной запуск демона
-│   ├── bw-launch              # Wrapper для launchd
-│   ├── keychain-save-session.sh
-│   └── keychain-get-session.sh
-├── launchd/                   # Автозапуск macOS
-│   ├── com.amcr.bw-secrets.plist
-│   └── README.md
-├── .claude/skills/            # Claude AI интеграция
-│   └── bw-secrets.md
-├── pyproject.toml             # Конфигурация пакета
-├── AGENTS.md                  # Архитектура
-├── CHANGELOG.md               # История изменений
-├── CLAUDE.md                  # Инструкции для AI
-└── README.md
+bw-suggest google
+# Выведет:
+# GOOGLE_USERNAME=$(bw-get google username)
+# GOOGLE_PASSWORD=$(bw-get google password)
 ```
 
 ## CLI команды
@@ -166,62 +61,47 @@ ls -la /tmp/bw-secrets.sock
 | Команда | Описание |
 |---------|----------|
 | `bw-get <item> [field]` | Получить секрет (field по умолчанию: password) |
-| `bw-suggest <item>` | Показать все поля с предложениями переменных |
-| `bw-list` | Список всех записей (только имена) |
-| `bw-reload` | Перезагрузить vault в демоне |
+| `bw-list` | Список всех записей |
+| `bw-suggest <item>` | Показать все поля записи |
+| `bw-reload` | Перезагрузить vault |
 | `bw-secrets-daemon` | Запустить демон |
 
-## Протокол socket
+## Автозапуск (macOS)
 
-Текстовый протокол через Unix socket `/tmp/bw-secrets.sock`:
+Чтобы демон запускался автоматически при логине:
 
+```bash
+# 1. Сохранить сессию в Keychain
+export BW_SESSION=$(bw unlock --raw)
+./scripts/keychain-save-session.sh
+
+# 2. Установить launchd агент
+./scripts/install-launchd.sh
 ```
-# Запрос → Ответ
 
-GET google password
-→ OK mysecretpassword
+Подробнее: [launchd/README.md](launchd/README.md)
 
-GET google api-key  
-→ OK sk-xxx
+## Требования
 
-SUGGEST google
-→ OK {"GOOGLE_USERNAME":"...","GOOGLE_PASSWORD":"..."}
-
-LIST
-→ OK ["google","openai","anthropic"]
-
-RELOAD
-→ OK reloaded
-
-PING
-→ OK pong
-```
+- Python >= 3.11
+- [uv](https://github.com/astral-sh/uv) — менеджер пакетов
+- [bitwarden-cli](https://bitwarden.com/help/cli/) — `brew install bitwarden-cli`
 
 ## Безопасность
 
-### Защита socket
-- Права 600 — только владелец может читать/писать
-- Файл в /tmp — удаляется при перезагрузке
+- Секреты хранятся только в RAM, не на диске
+- Unix socket с правами 600 (только владелец)
+- BW_SESSION в macOS Keychain (зашифрован)
+- Инструкции для AI-агентов в [AGENTS.md](AGENTS.md)
 
-### Секреты в памяти
-- Vault загружается в dict, хранится только в RAM
-- При остановке демона — данные исчезают
-- Никаких файлов с расшифрованными секретами
+## Структура
 
-### AI-агенты
-- Секреты не в .env файлах — агент не может прочитать случайно
-- CLAUDE.md содержит жёсткие инструкции не выводить секреты
-- При соблюдении инструкций — секреты не попадают в контекст
-
-## Зависимости
-
-- Python >= 3.11
-- Только stdlib (asyncio, json, subprocess, socket)
-- bitwarden-cli (`bw`) — должен быть установлен
-
-## TODO (после MVP)
-
-- [ ] Кэширование BW_SESSION в Keychain
-- [ ] GUI-промпт для мастер-пароля при старте
-- [ ] Автообновление vault по таймеру
-- [ ] Поддержка нескольких Bitwarden-аккаунтов
+```
+~/.secrets/
+├── src/bw_secrets/     # Python пакет
+├── scripts/            # Shell-скрипты
+├── launchd/            # Автозапуск macOS
+├── pyproject.toml
+├── AGENTS.md           # Инструкции для AI
+└── README.md
+```
