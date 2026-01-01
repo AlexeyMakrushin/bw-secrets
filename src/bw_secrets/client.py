@@ -57,3 +57,42 @@ def get_secret(item: str, field: str = "password") -> str:
         return response[3:]
     else:
         raise ValueError(response)
+
+
+def load_secrets(path: str = "secrets.json") -> dict[str, bool]:
+    """Загрузить секреты из JSON файла в os.environ.
+
+    Формат secrets.json:
+        {
+            "API_KEY": {"item": "openai", "field": "api-key"},
+            "DB_PASSWORD": {"item": "postgres", "field": "password"}
+        }
+
+    Args:
+        path: Путь к secrets.json
+
+    Returns:
+        dict с результатами: {"VAR_NAME": True/False}
+
+    Raises:
+        FileNotFoundError: Если файл не найден
+        json.JSONDecodeError: Если невалидный JSON
+    """
+    import json
+    import os
+
+    with open(path) as f:
+        secrets = json.load(f)
+
+    results = {}
+    for var_name, config in secrets.items():
+        item = config["item"]
+        field = config.get("field", "password")
+        try:
+            value = get_secret(item, field)
+            os.environ[var_name] = value
+            results[var_name] = True
+        except ValueError:
+            results[var_name] = False
+
+    return results

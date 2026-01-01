@@ -71,3 +71,39 @@ def cmd_reload():
     else:
         print(response, file=sys.stderr)
         sys.exit(1)
+
+
+def cmd_check():
+    """CLI команда: bw-check [secrets.json]
+
+    Проверяет что все секреты из файла существуют.
+    НЕ выводит значения секретов.
+    """
+    path = sys.argv[1] if len(sys.argv) > 1 else "secrets.json"
+
+    try:
+        with open(path) as f:
+            secrets = json.load(f)
+    except FileNotFoundError:
+        print(f"ERROR: File not found: {path}", file=sys.stderr)
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f"ERROR: Invalid JSON: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    all_ok = True
+    for var_name, config in secrets.items():
+        item = config["item"]
+        field = config.get("field", "password")
+
+        # Проверяем существование через GET, но НЕ выводим значение
+        response = send_command(f"GET {item} {field}")
+
+        if response.startswith("OK "):
+            print(f"✓ {var_name} ({item}/{field})")
+        else:
+            print(f"✗ {var_name} ({item}/{field}) — NOT FOUND")
+            all_ok = False
+
+    if not all_ok:
+        sys.exit(1)
