@@ -65,8 +65,11 @@ def load_secrets(path: str = "secrets.json") -> dict[str, bool]:
     Формат secrets.json:
         {
             "API_KEY": {"item": "openai", "field": "api-key"},
-            "DB_PASSWORD": {"item": "postgres", "field": "password"}
+            "TOKEN": {"value": "прямое-значение"}
         }
+
+    - item + field: загрузка из Bitwarden через bw-secrets демон
+    - value: прямое значение (для пользователей без bw-secrets)
 
     Args:
         path: Путь к secrets.json
@@ -86,7 +89,18 @@ def load_secrets(path: str = "secrets.json") -> dict[str, bool]:
 
     results = {}
     for var_name, config in secrets.items():
-        item = config["item"]
+        # Прямое значение
+        if "value" in config:
+            os.environ[var_name] = config["value"]
+            results[var_name] = True
+            continue
+
+        # Загрузка из Bitwarden
+        item = config.get("item")
+        if not item:
+            results[var_name] = False
+            continue
+
         field = config.get("field", "password")
         try:
             value = get_secret(item, field)

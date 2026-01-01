@@ -93,7 +93,22 @@ def cmd_check():
 
     all_ok = True
     for var_name, config in secrets.items():
-        item = config["item"]
+        # Прямое значение — проверяем только что не пустое
+        if "value" in config:
+            if config["value"]:
+                print(f"✓ {var_name} (direct value)")
+            else:
+                print(f"✗ {var_name} (direct value) — EMPTY")
+                all_ok = False
+            continue
+
+        # Загрузка из Bitwarden
+        item = config.get("item")
+        if not item:
+            print(f"✗ {var_name} — no 'item' or 'value' specified")
+            all_ok = False
+            continue
+
         field = config.get("field", "password")
 
         # Проверяем существование через GET, но НЕ выводим значение
