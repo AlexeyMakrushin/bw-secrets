@@ -5,6 +5,22 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
+# Загрузить .env (BW_SERVER)
+if [ -f "$PROJECT_DIR/.env" ]; then
+    export $(grep -v '^#' "$PROJECT_DIR/.env" | xargs)
+fi
+
+# Настроить сервер Bitwarden (если указан)
+if [ -n "${BW_SERVER}" ]; then
+    CURRENT_SERVER=$(bw config server 2>/dev/null)
+    if [ "${CURRENT_SERVER}" != "${BW_SERVER}" ]; then
+        echo "Configuring server: ${BW_SERVER}" >&2
+        # Logout если залогинен на другом сервере
+        bw logout 2>/dev/null
+        bw config server "${BW_SERVER}"
+    fi
+fi
+
 # Получить BW_SESSION из Keychain
 BW_SESSION=$(security find-generic-password \
     -a "${USER}" \
@@ -13,7 +29,7 @@ BW_SESSION=$(security find-generic-password \
 
 if [ -z "${BW_SESSION}" ]; then
     echo "ERROR: BW_SESSION not found in Keychain" >&2
-    echo "First run: cd ~/.secrets && ./scripts/keychain-save-session.sh" >&2
+    echo "Run: bw-unlock" >&2
     exit 1
 fi
 

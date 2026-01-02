@@ -10,6 +10,7 @@ bw-suggest = "bw_secrets.cli:cmd_suggest"
 bw-reload = "bw_secrets.cli:cmd_reload"
 bw-list = "bw_secrets.cli:cmd_list"
 bw-check = "bw_secrets.cli:cmd_check"
+bw-add = "bw_secrets.cli:cmd_add"
 bw-secrets-daemon = "bw_secrets.daemon:main"
 
 [build-system]
