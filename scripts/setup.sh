@@ -289,18 +289,43 @@ INSTALLED_SKILLS=()
 DETECTED_AI=()
 
 # Check for AI assistants (name:directory pairs)
+# Covers major AI coding assistants that support skills/custom instructions
 AI_LIST=(
+    # Anthropic
     "Claude:$HOME/.claude"
+    # OpenAI
     "Codex:$HOME/.codex"
+    "Copilot:$HOME/.config/github-copilot"
+    # Google
+    "Gemini:$HOME/.gemini"
+    # Chinese AI
+    "DeepSeek:$HOME/.deepseek"
+    "Qwen:$HOME/.qwen"
+    "GLM:$HOME/.glm"
+    "ChatGLM:$HOME/.chatglm"
+    "Baichuan:$HOME/.baichuan"
+    "Yi:$HOME/.yi"
+    # IDE-integrated
     "Cursor:$HOME/.cursor"
     "Windsurf:$HOME/.windsurf"
     "Codeium:$HOME/.codeium"
+    "Zed:$HOME/.zed"
+    # Extensions/Plugins
     "Continue:$HOME/.continue"
     "Cody:$HOME/.cody"
-    "Sourcegraph:$HOME/.sourcegraph"
+    "Cline:$HOME/.cline"
+    "Roo:$HOME/.roo"
     "Aider:$HOME/.aider"
+    # Other
+    "Replit:$HOME/.replit"
+    "Supermaven:$HOME/.supermaven"
+    "Pieces:$HOME/.pieces"
+    "Phind:$HOME/.phind"
     "Tabnine:$HOME/.tabnine"
-    "Copilot:$HOME/.config/github-copilot"
+    "AmazonQ:$HOME/.amazon-q"
+    "Blackbox:$HOME/.blackbox"
+    "CodeGPT:$HOME/.codegpt"
+    "Bito:$HOME/.bito"
 )
 
 # Also check /Applications for installed apps
