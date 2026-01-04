@@ -365,6 +365,30 @@ else
     echo "  mkdir -p ~/.claude/skills/bw-secrets && cp ~/.secrets/SKILL.md ~/.claude/skills/bw-secrets/"
 fi
 
+# 9. Ensure daemon is running
+step "Starting daemon..."
+sleep 1
+if [[ ! -S /tmp/bw-secrets.sock ]]; then
+    # Try to start via launchd first
+    if launchctl list 2>/dev/null | grep -q "$LAUNCHD_LABEL"; then
+        launchctl kickstart -k "gui/$(id -u)/$LAUNCHD_LABEL" 2>/dev/null || true
+        sleep 2
+    fi
+
+    # If still not running, start manually
+    if [[ ! -S /tmp/bw-secrets.sock ]]; then
+        export BW_SESSION
+        "$PROJECT_DIR/.venv/bin/bw-secrets-daemon" &
+        sleep 2
+    fi
+fi
+
+if [[ -S /tmp/bw-secrets.sock ]]; then
+    success "Daemon running"
+else
+    warn "Daemon not started. Run: bw-unlock"
+fi
+
 # Done
 echo ""
 echo "╔════════════════════════════════════════╗"
