@@ -285,68 +285,60 @@ fi
 step "Checking for AI assistants..."
 
 SKILL_SOURCE="$PROJECT_DIR/SKILL.md"
-INSTALLED_SKILLS=()
-DETECTED_AI=()
+DETECTED=""
+INSTALLED=""
 
-# Check for AI assistants (name:directory pairs)
-# Covers major AI coding assistants that support skills/custom instructions
-AI_LIST=(
-    # Anthropic
-    "Claude:$HOME/.claude"
-    # OpenAI
-    "Codex:$HOME/.codex"
-    "Copilot:$HOME/.config/github-copilot"
-    # Google
-    "Gemini:$HOME/.gemini"
-    # Chinese AI
-    "DeepSeek:$HOME/.deepseek"
-    "Qwen:$HOME/.qwen"
-    "GLM:$HOME/.glm"
-    "ChatGLM:$HOME/.chatglm"
-    "Baichuan:$HOME/.baichuan"
-    "Yi:$HOME/.yi"
-    # IDE-integrated
-    "Cursor:$HOME/.cursor"
-    "Windsurf:$HOME/.windsurf"
-    "Codeium:$HOME/.codeium"
-    "Zed:$HOME/.zed"
-    # Extensions/Plugins
-    "Continue:$HOME/.continue"
-    "Cody:$HOME/.cody"
-    "Cline:$HOME/.cline"
-    "Roo:$HOME/.roo"
-    "Aider:$HOME/.aider"
-    # Other
-    "Replit:$HOME/.replit"
-    "Supermaven:$HOME/.supermaven"
-    "Pieces:$HOME/.pieces"
-    "Phind:$HOME/.phind"
-    "Tabnine:$HOME/.tabnine"
-    "AmazonQ:$HOME/.amazon-q"
-    "Blackbox:$HOME/.blackbox"
-    "CodeGPT:$HOME/.codegpt"
-    "Bito:$HOME/.bito"
-)
-
-# Also check /Applications for installed apps
-check_app() {
-    [[ -d "/Applications/$1.app" ]] || [[ -d "$HOME/Applications/$1.app" ]]
+# Check for AI assistants and collect detected ones
+# Format: name:directory
+check_ai() {
+    local name="$1"
+    local dir="$2"
+    if [[ -d "$dir" ]]; then
+        DETECTED="$DETECTED $name:$dir"
+    fi
 }
 
-# Detect installed AI assistants
-declare -A AI_DIRS
-for item in "${AI_LIST[@]}"; do
-    ai_name="${item%%:*}"
-    ai_dir="${item#*:}"
-    if [[ -d "$ai_dir" ]]; then
-        DETECTED_AI+=("$ai_name")
-        AI_DIRS["$ai_name"]="$ai_dir"
-    fi
-done
+# Anthropic
+check_ai "Claude" "$HOME/.claude"
+# OpenAI
+check_ai "Codex" "$HOME/.codex"
+check_ai "Copilot" "$HOME/.config/github-copilot"
+# Google
+check_ai "Gemini" "$HOME/.gemini"
+# Chinese AI
+check_ai "DeepSeek" "$HOME/.deepseek"
+check_ai "Qwen" "$HOME/.qwen"
+check_ai "GLM" "$HOME/.glm"
+check_ai "ChatGLM" "$HOME/.chatglm"
+check_ai "Baichuan" "$HOME/.baichuan"
+check_ai "Yi" "$HOME/.yi"
+# IDE-integrated
+check_ai "Cursor" "$HOME/.cursor"
+check_ai "Windsurf" "$HOME/.windsurf"
+check_ai "Codeium" "$HOME/.codeium"
+check_ai "Zed" "$HOME/.zed"
+# Extensions/Plugins
+check_ai "Continue" "$HOME/.continue"
+check_ai "Cody" "$HOME/.cody"
+check_ai "Cline" "$HOME/.cline"
+check_ai "Roo" "$HOME/.roo"
+check_ai "Aider" "$HOME/.aider"
+# Other
+check_ai "Replit" "$HOME/.replit"
+check_ai "Supermaven" "$HOME/.supermaven"
+check_ai "Pieces" "$HOME/.pieces"
+check_ai "Phind" "$HOME/.phind"
+check_ai "Tabnine" "$HOME/.tabnine"
+check_ai "AmazonQ" "$HOME/.amazon-q"
+check_ai "Blackbox" "$HOME/.blackbox"
+check_ai "CodeGPT" "$HOME/.codegpt"
+check_ai "Bito" "$HOME/.bito"
 
-if [[ ${#DETECTED_AI[@]} -gt 0 ]]; then
+if [[ -n "$DETECTED" ]]; then
+    # Extract just names for display
+    NAMES=$(echo "$DETECTED" | tr ' ' '\n' | cut -d: -f1 | tr '\n' ' ')
     echo ""
-    echo "  Detected AI assistants: ${DETECTED_AI[*]}"
+    echo "  Detected AI assistants: $NAMES"
     echo ""
     echo "  Install bw-secrets skill for these assistants?"
     echo "  This teaches AI how to work with your secrets securely."
@@ -355,13 +347,14 @@ if [[ ${#DETECTED_AI[@]} -gt 0 ]]; then
     INSTALL_SKILLS="${INSTALL_SKILLS:-Y}"
 
     if [[ "$INSTALL_SKILLS" =~ ^[Yy]$ ]] || [[ -z "$INSTALL_SKILLS" ]]; then
-        for ai_name in "${DETECTED_AI[@]}"; do
-            base_dir="${AI_DIRS[$ai_name]}"
-            skill_dir="$base_dir/skills/bw-secrets"
+        for item in $DETECTED; do
+            ai_name="${item%%:*}"
+            ai_dir="${item#*:}"
+            skill_dir="$ai_dir/skills/bw-secrets"
             mkdir -p "$skill_dir"
             cp "$SKILL_SOURCE" "$skill_dir/"
-            INSTALLED_SKILLS+=("$ai_name")
-            success "Installed skill for $ai_name → $skill_dir"
+            INSTALLED="$INSTALLED $ai_name"
+            success "Installed skill for $ai_name"
         done
     else
         warn "Skipped skill installation"
@@ -382,8 +375,8 @@ echo "Quick test:"
 echo "  source ~/.zshrc"
 echo "  bw-list | head -5"
 echo ""
-if [[ ${#INSTALLED_SKILLS[@]} -gt 0 ]]; then
-    echo "Skills installed for: ${INSTALLED_SKILLS[*]}"
+if [[ -n "$INSTALLED" ]]; then
+    echo "Skills installed for:$INSTALLED"
     echo ""
 fi
 echo "Use in projects — see README.md"
