@@ -78,8 +78,18 @@ security add-generic-password \
     -U
 echo "Session saved to Keychain"
 
-# Перезапустить демон
+# Перезапустить демон (если установлен)
 LAUNCHD_LABEL="com.${USER}.bw-secrets"
-launchctl kickstart -k "gui/$(id -u)/$LAUNCHD_LABEL"
+if launchctl list 2>/dev/null | grep -q "$LAUNCHD_LABEL"; then
+    launchctl kickstart -k "gui/$(id -u)/$LAUNCHD_LABEL"
+    echo "Daemon restarted"
+else
+    echo "Note: launchd service not installed. Run setup.sh to enable auto-start."
+    echo "Starting daemon manually..."
+    pkill -f bw-secrets-daemon 2>/dev/null || true
+    export BW_SESSION
+    "$SCRIPT_DIR/../.venv/bin/bw-secrets-daemon" &
+    sleep 1
+fi
 
 echo "Done. Verify: ~/.secrets/.venv/bin/bw-list"

@@ -7,6 +7,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 DEFAULT_SERVER="https://vault.bitwarden.com"
+LAUNCHD_LABEL="com.${USER}.bw-secrets"
+PLIST_NAME="${LAUNCHD_LABEL}.plist"
+PLIST_DEST="$HOME/Library/LaunchAgents/$PLIST_NAME"
 
 echo "╔════════════════════════════════════════╗"
 echo "║     bw-secrets setup                   ║"
@@ -136,9 +139,10 @@ fi
 
 export PATH="$PROJECT_DIR/.venv/bin:$PATH"
 
-# 6. Bitwarden login
+# 6. Bitwarden login and unlock
 step "Setting up Bitwarden..."
 
+# Configure server if not default
 if [[ "$BW_SERVER" != "$DEFAULT_SERVER" ]]; then
     CURRENT_SERVER=$(bw config server 2>/dev/null || echo "")
     if [[ "$CURRENT_SERVER" != "$BW_SERVER" ]]; then
@@ -150,49 +154,139 @@ fi
 
 BW_STATUS=$(bw status 2>/dev/null | grep -o '"status":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
 
+# Login if needed
 if [[ "$BW_STATUS" == "unauthenticated" ]]; then
     echo ""
     echo "  Please login to Bitwarden:"
     echo ""
     bw login
-elif [[ "$BW_STATUS" == "locked" ]]; then
-    success "Bitwarden: logged in (locked)"
-elif [[ "$BW_STATUS" == "unlocked" ]]; then
-    success "Bitwarden: unlocked"
-else
-    warn "Bitwarden status unknown. Run: bw login"
+    BW_STATUS="locked"
 fi
 
-# 7. Unlock and save session
-step "Unlocking vault and saving session..."
-"$SCRIPT_DIR/bw-unlock.sh"
+# Unlock and save session
+if [[ "$BW_STATUS" == "locked" ]] || [[ "$BW_STATUS" == "unauthenticated" ]]; then
+    echo ""
+    echo "  Unlocking vault..."
+    BW_SESSION=$(bw unlock --raw)
 
-# 8. Install launchd service
-step "Installing launchd service (auto-start)..."
-"$SCRIPT_DIR/install-launchd.sh"
+    if [[ -z "$BW_SESSION" ]]; then
+        error "Failed to unlock vault"
+        exit 1
+    fi
 
-# 9. Install AI assistant skills
+    # Save to Keychain
+    security add-generic-password \
+        -a "${USER}" \
+        -s "bw-secrets-session" \
+        -w "${BW_SESSION}" \
+        -U 2>/dev/null || security add-generic-password \
+        -a "${USER}" \
+        -s "bw-secrets-session" \
+        -w "${BW_SESSION}"
+
+    success "Session saved to Keychain"
+elif [[ "$BW_STATUS" == "unlocked" ]]; then
+    success "Bitwarden already unlocked"
+    # Still need to save session to Keychain
+    BW_SESSION=$(bw unlock --raw 2>/dev/null || echo "")
+    if [[ -n "$BW_SESSION" ]]; then
+        security add-generic-password \
+            -a "${USER}" \
+            -s "bw-secrets-session" \
+            -w "${BW_SESSION}" \
+            -U 2>/dev/null || true
+    fi
+fi
+
+# 7. Ask about auto-start daemon
+step "Daemon auto-start configuration..."
+echo ""
+echo "  Start bw-secrets daemon automatically on login?"
+echo "  (Recommended for seamless experience)"
+echo ""
+read -p "  Enable auto-start? [Y/n]: " ENABLE_AUTOSTART
+ENABLE_AUTOSTART="${ENABLE_AUTOSTART:-Y}"
+
+if [[ "$ENABLE_AUTOSTART" =~ ^[Yy]$ ]] || [[ -z "$ENABLE_AUTOSTART" ]]; then
+    # Create LaunchAgents directory if needed
+    mkdir -p "$HOME/Library/LaunchAgents"
+
+    # Stop existing agent if running
+    if launchctl list 2>/dev/null | grep -q "$LAUNCHD_LABEL"; then
+        launchctl unload "$PLIST_DEST" 2>/dev/null || true
+    fi
+
+    # Create plist
+    cat > "$PLIST_DEST" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>$LAUNCHD_LABEL</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>$PROJECT_DIR/scripts/bw-launch</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/bw-secrets.out</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/bw-secrets.err</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+</dict>
+</plist>
+EOF
+
+    # Load agent
+    launchctl load "$PLIST_DEST"
+    success "Daemon auto-start enabled"
+
+    # Wait and check
+    sleep 2
+    if [[ -S /tmp/bw-secrets.sock ]]; then
+        success "Daemon running (socket: /tmp/bw-secrets.sock)"
+    else
+        warn "Daemon may need a moment to start. Check: tail -20 /tmp/bw-secrets.err"
+    fi
+else
+    warn "Auto-start disabled. Start manually with: bw-unlock"
+fi
+
+# 8. Install AI assistant skills
 step "Checking for AI assistants..."
 
 SKILL_SOURCE="$PROJECT_DIR/SKILL.md"
 INSTALLED_SKILLS=()
 
-# Define AI assistants and their skill directories
-declare -A AI_ASSISTANTS=(
-    ["Claude Code"]="$HOME/.claude/skills/bw-secrets"
-    ["Cursor"]="$HOME/.cursor/skills/bw-secrets"
-    ["Windsurf"]="$HOME/.windsurf/skills/bw-secrets"
-    ["Continue"]="$HOME/.continue/skills/bw-secrets"
-    ["Cody"]="$HOME/.cody/skills/bw-secrets"
-    ["Aider"]="$HOME/.aider/skills/bw-secrets"
+# Define AI assistants and their config directories
+declare -A AI_DIRS=(
+    ["Claude Code"]="$HOME/.claude"
+    ["Cursor"]="$HOME/.cursor"
+    ["Windsurf"]="$HOME/.windsurf"
+    ["Continue"]="$HOME/.continue"
+    ["Cody"]="$HOME/.cody"
+    ["Aider"]="$HOME/.aider"
 )
 
 # Check which AI assistants are installed
 DETECTED_AI=()
-for ai_name in "${!AI_ASSISTANTS[@]}"; do
-    parent_dir=$(dirname "${AI_ASSISTANTS[$ai_name]}")
-    parent_dir=$(dirname "$parent_dir")  # Go up one more level
-    if [[ -d "$parent_dir" ]]; then
+for ai_name in "${!AI_DIRS[@]}"; do
+    if [[ -d "${AI_DIRS[$ai_name]}" ]]; then
         DETECTED_AI+=("$ai_name")
     fi
 done
@@ -209,7 +303,7 @@ if [[ ${#DETECTED_AI[@]} -gt 0 ]]; then
 
     if [[ "$INSTALL_SKILLS" =~ ^[Yy]$ ]] || [[ -z "$INSTALL_SKILLS" ]]; then
         for ai_name in "${DETECTED_AI[@]}"; do
-            skill_dir="${AI_ASSISTANTS[$ai_name]}"
+            skill_dir="${AI_DIRS[$ai_name]}/skills/bw-secrets"
             mkdir -p "$skill_dir"
             cp "$SKILL_SOURCE" "$skill_dir/"
             INSTALLED_SKILLS+=("$ai_name")
@@ -220,7 +314,8 @@ if [[ ${#DETECTED_AI[@]} -gt 0 ]]; then
     fi
 else
     warn "No AI assistants detected"
-    echo "  To install manually: mkdir -p ~/.claude/skills/bw-secrets && cp ~/.secrets/SKILL.md ~/.claude/skills/bw-secrets/"
+    echo "  To install manually later:"
+    echo "  mkdir -p ~/.claude/skills/bw-secrets && cp ~/.secrets/SKILL.md ~/.claude/skills/bw-secrets/"
 fi
 
 # Done
@@ -230,10 +325,11 @@ echo "║     Setup complete!                    ║"
 echo "╚════════════════════════════════════════╝"
 echo ""
 echo "Quick test:"
+echo "  source ~/.zshrc"
 echo "  bw-list | head -5"
 echo ""
 if [[ ${#INSTALLED_SKILLS[@]} -gt 0 ]]; then
     echo "Skills installed for: ${INSTALLED_SKILLS[*]}"
     echo ""
 fi
-echo "Use in projects - see README.md"
+echo "Use in projects — see README.md"
