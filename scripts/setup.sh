@@ -154,27 +154,53 @@ fi
 
 BW_STATUS=$(bw status 2>/dev/null | grep -o '"status":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
 
-# Login if needed
+# Login and unlock
 if [[ "$BW_STATUS" == "unauthenticated" ]]; then
     echo ""
     echo "  Please login to Bitwarden:"
     echo ""
-    bw login
-    BW_STATUS="locked"
-fi
-
-# Unlock and save session
-if [[ "$BW_STATUS" == "locked" ]] || [[ "$BW_STATUS" == "unauthenticated" ]]; then
+    read -p "  Email: " BW_EMAIL
+    read -s -p "  Master password: " BW_PASS
     echo ""
-    echo "  Unlocking vault..."
-    BW_SESSION=$(bw unlock --raw)
+
+    # Login and get session in one step
+    BW_SESSION=$(echo "$BW_PASS" | bw login "$BW_EMAIL" --raw 2>/dev/null)
+
+    # Clear password from memory
+    unset BW_PASS
+
+    if [[ -z "$BW_SESSION" ]]; then
+        error "Failed to login. Check email/password."
+        exit 1
+    fi
+    success "Logged in"
+elif [[ "$BW_STATUS" == "locked" ]]; then
+    echo ""
+    read -s -p "  Master password: " BW_PASS
+    echo ""
+
+    BW_SESSION=$(echo "$BW_PASS" | bw unlock --passwordenv BW_PASS --raw 2>/dev/null)
+
+    # Alternative method if above fails
+    if [[ -z "$BW_SESSION" ]]; then
+        export BW_PASS
+        BW_SESSION=$(bw unlock --passwordenv BW_PASS --raw 2>/dev/null)
+    fi
+
+    unset BW_PASS
 
     if [[ -z "$BW_SESSION" ]]; then
         error "Failed to unlock vault"
         exit 1
     fi
+    success "Vault unlocked"
+else
+    success "Bitwarden ready"
+    BW_SESSION=$(bw unlock --raw 2>/dev/null || echo "")
+fi
 
-    # Save to Keychain
+# Save session to Keychain
+if [[ -n "$BW_SESSION" ]]; then
     security add-generic-password \
         -a "${USER}" \
         -s "bw-secrets-session" \
@@ -183,19 +209,7 @@ if [[ "$BW_STATUS" == "locked" ]] || [[ "$BW_STATUS" == "unauthenticated" ]]; th
         -a "${USER}" \
         -s "bw-secrets-session" \
         -w "${BW_SESSION}"
-
     success "Session saved to Keychain"
-elif [[ "$BW_STATUS" == "unlocked" ]]; then
-    success "Bitwarden already unlocked"
-    # Still need to save session to Keychain
-    BW_SESSION=$(bw unlock --raw 2>/dev/null || echo "")
-    if [[ -n "$BW_SESSION" ]]; then
-        security add-generic-password \
-            -a "${USER}" \
-            -s "bw-secrets-session" \
-            -w "${BW_SESSION}" \
-            -U 2>/dev/null || true
-    fi
 fi
 
 # 7. Ask about auto-start daemon
