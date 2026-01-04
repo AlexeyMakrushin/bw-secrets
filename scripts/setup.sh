@@ -286,22 +286,36 @@ step "Checking for AI assistants..."
 
 SKILL_SOURCE="$PROJECT_DIR/SKILL.md"
 INSTALLED_SKILLS=()
+DETECTED_AI=()
 
-# Define AI assistants and their config directories
-declare -A AI_DIRS=(
-    ["Claude Code"]="$HOME/.claude"
-    ["Cursor"]="$HOME/.cursor"
-    ["Windsurf"]="$HOME/.windsurf"
-    ["Continue"]="$HOME/.continue"
-    ["Cody"]="$HOME/.cody"
-    ["Aider"]="$HOME/.aider"
+# Check for AI assistants (name:directory pairs)
+AI_LIST=(
+    "Claude:$HOME/.claude"
+    "Codex:$HOME/.codex"
+    "Cursor:$HOME/.cursor"
+    "Windsurf:$HOME/.windsurf"
+    "Codeium:$HOME/.codeium"
+    "Continue:$HOME/.continue"
+    "Cody:$HOME/.cody"
+    "Sourcegraph:$HOME/.sourcegraph"
+    "Aider:$HOME/.aider"
+    "Tabnine:$HOME/.tabnine"
+    "Copilot:$HOME/.config/github-copilot"
 )
 
-# Check which AI assistants are installed
-DETECTED_AI=()
-for ai_name in "${!AI_DIRS[@]}"; do
-    if [[ -d "${AI_DIRS[$ai_name]}" ]]; then
+# Also check /Applications for installed apps
+check_app() {
+    [[ -d "/Applications/$1.app" ]] || [[ -d "$HOME/Applications/$1.app" ]]
+}
+
+# Detect installed AI assistants
+declare -A AI_DIRS
+for item in "${AI_LIST[@]}"; do
+    ai_name="${item%%:*}"
+    ai_dir="${item#*:}"
+    if [[ -d "$ai_dir" ]]; then
         DETECTED_AI+=("$ai_name")
+        AI_DIRS["$ai_name"]="$ai_dir"
     fi
 done
 
@@ -317,11 +331,12 @@ if [[ ${#DETECTED_AI[@]} -gt 0 ]]; then
 
     if [[ "$INSTALL_SKILLS" =~ ^[Yy]$ ]] || [[ -z "$INSTALL_SKILLS" ]]; then
         for ai_name in "${DETECTED_AI[@]}"; do
-            skill_dir="${AI_DIRS[$ai_name]}/skills/bw-secrets"
+            base_dir="${AI_DIRS[$ai_name]}"
+            skill_dir="$base_dir/skills/bw-secrets"
             mkdir -p "$skill_dir"
             cp "$SKILL_SOURCE" "$skill_dir/"
             INSTALLED_SKILLS+=("$ai_name")
-            success "Installed skill for $ai_name"
+            success "Installed skill for $ai_name → $skill_dir"
         done
     else
         warn "Skipped skill installation"
