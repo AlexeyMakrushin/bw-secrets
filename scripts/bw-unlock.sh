@@ -79,6 +79,7 @@ security add-generic-password \
 echo "Session saved to Keychain"
 
 # Перезапустить демон
-launchctl kickstart -k "gui/$(id -u)/com.amcr.bw-secrets"
+LAUNCHD_LABEL="com.${USER}.bw-secrets"
+launchctl kickstart -k "gui/$(id -u)/$LAUNCHD_LABEL"
 
 echo "Done. Verify: ~/.secrets/.venv/bin/bw-list"

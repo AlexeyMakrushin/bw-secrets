@@ -6,7 +6,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-PLIST_NAME="com.amcr.bw-secrets.plist"
+PLIST_NAME="com.${USER}.bw-secrets.plist"
 PLIST_DEST="$HOME/Library/LaunchAgents/$PLIST_NAME"
 
 echo "Installing bw-secrets launchd agent..."
@@ -22,7 +22,8 @@ if ! security find-generic-password -a "${USER}" -s "bw-secrets-session" -w >/de
 fi
 
 # Остановить существующий агент если запущен
-if launchctl list | grep -q "com.amcr.bw-secrets"; then
+LAUNCHD_LABEL="com.${USER}.bw-secrets"
+if launchctl list | grep -q "$LAUNCHD_LABEL"; then
     echo "Stopping existing agent..."
     launchctl unload "$PLIST_DEST" 2>/dev/null || true
 fi
@@ -35,7 +36,7 @@ cat > "$PLIST_DEST" << EOF
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.amcr.bw-secrets</string>
+    <string>$LAUNCHD_LABEL</string>
 
     <key>ProgramArguments</key>
     <array>

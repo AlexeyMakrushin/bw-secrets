@@ -1,160 +1,218 @@
 # bw-secrets
 
-Демон для безопасного доступа к секретам из Bitwarden. Загружает vault в память один раз — отдаёт секреты мгновенно.
+**Use AI coding assistants without ever exposing your passwords.**
 
-## Зачем?
+bw-secrets lets you work with Claude, Cursor, Copilot, and other AI tools while keeping your credentials secure in Bitwarden. The AI never sees your actual passwords — it only knows the *names* of secrets and retrieves them at runtime.
 
-- **Без .env файлов** — секреты не на диске
-- **Быстро** — vault в памяти, не нужно каждый раз расшифровывать
-- **Просто** — `bw-get google password` вместо длинных команд bw
-- **Универсально** — работает с Docker, Python, Node, любым языком через direnv
+## Why?
 
-## Быстрый старт
+When you use AI assistants to write code, you face a dilemma:
+- Share your `.env` file → AI sees your passwords
+- Don't share → AI can't help with configuration
 
-```bash
-# 1. Установить
-cd ~/.secrets
-uv sync
+**bw-secrets solves this:**
+- AI sees: `export DB_PASSWORD=$(bw-get myapp password)`
+- AI never sees: the actual password value
+- Your app gets: the real password at runtime
 
-# 2. Настроить сервер (для self-hosted)
-cp .env.example .env
-# Отредактировать BW_SERVER
+No `.env` files with secrets on disk. No passwords in your prompts. No trust required.
 
-# 3. Добавить алиасы в .zshrc
-echo 'alias bw-unlock="~/.secrets/scripts/bw-unlock.sh"' >> ~/.zshrc
-source ~/.zshrc
+## How It Works
 
-# 4. Разблокировать и запустить демон
-bw-unlock
-
-# 5. Проверить
-~/.secrets/.venv/bin/bw-list
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Your Code     │────▶│   .envrc        │────▶│   bw-secrets    │
+│   (or AI)       │     │   (references)  │     │   daemon        │
+└─────────────────┘     └─────────────────┘     └────────┬────────┘
+                                                         │
+                                                         ▼
+                                                ┌─────────────────┐
+                                                │   Bitwarden     │
+                                                │   (encrypted)   │
+                                                └─────────────────┘
 ```
 
-## Использование: direnv
+1. **Daemon** loads your Bitwarden vault into memory (once)
+2. **direnv** reads `.envrc` when you enter a project directory
+3. **bw-get** fetches secrets from the daemon instantly
+4. **Your app** receives environment variables with real values
+5. **AI** only sees the `.envrc` template — never the values
 
-Рекомендуемый способ — через direnv:
+## Quick Start
 
 ```bash
-# Установить direnv (один раз)
-brew install direnv
-echo 'eval "$(direnv hook zsh)"' >> ~/.zshrc
+# Clone and run setup
+git clone https://github.com/AlexeyMakrushin/bw-secrets.git ~/.secrets
+cd ~/.secrets && ./scripts/setup.sh
 ```
 
-В каждом проекте создать `.envrc`:
+The setup will:
+1. Install dependencies (bitwarden-cli, direnv, uv)
+2. Ask for your Bitwarden server (default: vault.bitwarden.com)
+3. Configure your shell
+4. Login and unlock your vault
+5. Start the daemon (auto-starts on login)
+
+## Using in Projects
+
+### Step 1: Create `.envrc` (secrets)
 
 ```bash
-export POSTGRES_PASSWORD=$(~/.secrets/.venv/bin/bw-get myapp password)
-export API_KEY=$(~/.secrets/.venv/bin/bw-get myapp api-key)
+# .envrc — loaded by direnv, NEVER commit this file
+export DB_PASSWORD=$(bw-get myapp password)
+export API_KEY=$(bw-get myapp api-key)
+export OPENAI_KEY=$(bw-get openai api-key)
 ```
 
+### Step 2: Allow direnv
+
 ```bash
-direnv allow     # разрешить (один раз)
-cd project/      # переменные загружаются автоматически
-docker compose up
+direnv allow
 ```
 
-### В скриптах/cron
+### Step 3: Create `.env.example` (documentation)
 
 ```bash
-#!/bin/bash
-source /path/to/project/.envrc
-docker compose up -d
+# .env.example — commit this, shows required variables
+DB_PASSWORD=<from-bitwarden:myapp>
+API_KEY=<from-bitwarden:myapp>
+OPENAI_KEY=<from-bitwarden:openai>
 ```
 
-## CLI команды
-
-| Команда | Описание |
-|---------|----------|
-| `bw-get <item> [field]` | Получить секрет (field по умолчанию: password) |
-| `bw-list` | Список всех записей |
-| `bw-suggest <item>` | Показать все поля записи |
-| `bw-add <item> field=value ...` | Создать новую запись |
-| `bw-reload` | Перезагрузить vault |
-
-### Создание записи
+### Step 4: Create `.env` (non-secret config)
 
 ```bash
-bw-add telegram-bot token=123456:ABC
-bw-add openai api-key=sk-xxx username=user@example.com
+# .env — safe to commit, no secrets here
+DEBUG=false
+LOG_LEVEL=info
+PORT=8080
 ```
 
-Стандартные поля: `password`, `username`, `uri`, `notes`.
-Остальные сохраняются как custom fields.
+### Step 5: Add to `.gitignore`
 
-## Конфигурация (.env)
+```
+.envrc
+```
+
+## File Conventions
+
+| File | Contains | Commit? |
+|------|----------|---------|
+| `.envrc` | `bw-get` commands | **Never** |
+| `.env` | Non-secret config | Yes |
+| `.env.example` | Documentation | Yes |
+
+## CLI Reference
+
+| Command | Description |
+|---------|-------------|
+| `bw-list` | List all vault entries |
+| `bw-suggest <item>` | Show fields for an entry |
+| `bw-get <item> [field]` | Get secret (default: password) |
+| `bw-add <item> key=value` | Create new entry |
+| `bw-reload` | Reload vault cache |
+| `bw-unlock` | Re-unlock vault |
+
+### Examples
 
 ```bash
-# Сервер (для self-hosted Vaultwarden)
+# Find entries
+bw-list | grep -i postgres
+
+# See available fields
+bw-suggest myapp
+
+# Get specific field
+bw-get myapp api-key
+
+# Create new entry
+bw-add telegram-bot token=123:ABC password=secret
+```
+
+## Requirements
+
+- macOS (Apple Silicon or Intel)
+- [Homebrew](https://brew.sh)
+- [Bitwarden](https://bitwarden.com) account (cloud or self-hosted)
+
+Dependencies installed automatically by setup:
+- bitwarden-cli
+- direnv
+- uv (Python package manager)
+
+## For AI Coding Assistants
+
+This repository includes `SKILL.md` — a skill file that teaches AI assistants how to work with bw-secrets securely.
+
+**Automatic installation:** The setup script detects installed AI assistants and offers to install the skill automatically. Supported:
+- Claude Code (`~/.claude/skills/bw-secrets/`)
+- Cursor (`~/.cursor/skills/bw-secrets/`)
+- Windsurf (`~/.windsurf/skills/bw-secrets/`)
+- Continue (`~/.continue/skills/bw-secrets/`)
+- Cody (`~/.cody/skills/bw-secrets/`)
+- Aider (`~/.aider/skills/bw-secrets/`)
+
+**Manual installation:**
+
+```bash
+mkdir -p ~/.claude/skills/bw-secrets
+cp ~/.secrets/SKILL.md ~/.claude/skills/bw-secrets/
+```
+
+## Configuration
+
+Edit `~/.secrets/.env`:
+
+```bash
+# Self-hosted Vaultwarden
 BW_SERVER=https://vault.example.com
 
-# API Key (опционально — для автоматического логина)
+# API key for non-interactive login (optional)
 BW_CLIENT_ID=user.xxx
 BW_CLIENT_SECRET=xxx
-
-# Master password (опционально — для полной автоматизации)
-BW_PASSWORD=xxx
 ```
 
-## Автозапуск (macOS launchd)
+## Troubleshooting
 
-Чтобы демон запускался автоматически при логине:
-
-```bash
-# Установить launchd агент
-./scripts/install-launchd.sh
-```
-
-### Управление
-
-```bash
-# Статус
-launchctl list | grep bw-secrets
-
-# Логи
-tail -f /tmp/bw-secrets.err
-
-# Остановить
-launchctl unload ~/Library/LaunchAgents/com.amcr.bw-secrets.plist
-
-# Запустить
-launchctl load ~/Library/LaunchAgents/com.amcr.bw-secrets.plist
-```
-
-### Удаление
-
-```bash
-launchctl unload ~/Library/LaunchAgents/com.amcr.bw-secrets.plist
-rm ~/Library/LaunchAgents/com.amcr.bw-secrets.plist
-```
-
-### Обновление сессии
-
-Если сессия истекла:
-
+### "Socket not found"
 ```bash
 bw-unlock
 ```
 
-## Требования
+### "Session expired"
+```bash
+bw-unlock
+```
 
-- Python >= 3.11
-- [uv](https://github.com/astral-sh/uv) — менеджер пакетов
-- [bitwarden-cli](https://bitwarden.com/help/cli/) — `brew install bitwarden-cli`
-- [direnv](https://direnv.net/) — `brew install direnv` (опционально)
+### Daemon not starting
+```bash
+# Check logs
+tail -20 /tmp/bw-secrets.err
 
-## Безопасность
+# Restart daemon
+launchctl kickstart -k gui/$(id -u)/com.amcr.bw-secrets
+```
 
-- Секреты хранятся только в RAM, не на диске
-- Unix socket с правами 600 (только владелец)
-- BW_SESSION в macOS Keychain (зашифрован)
+## Security
 
-## Структура
+- Secrets stored only in RAM, never on disk
+- Unix socket with 600 permissions (owner only)
+- Session key stored in macOS Keychain (encrypted)
+- AI assistants see only variable names, never values
+
+## Structure
 
 ```
 ~/.secrets/
-├── src/bw_secrets/     # Python пакет
-├── scripts/            # Shell-скрипты
-├── launchd/            # Автозапуск macOS
-└── pyproject.toml
+├── scripts/
+│   ├── setup.sh          # One-command installation
+│   ├── bw-unlock.sh      # Unlock vault
+│   └── install-launchd.sh
+├── src/bw_secrets/       # Python package
+├── SKILL.md              # Claude Code skill
+└── .env                  # Your server config
 ```
+
+## License
+
+MIT
