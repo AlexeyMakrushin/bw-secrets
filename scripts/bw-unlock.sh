@@ -71,7 +71,12 @@ if [ -z "${BW_SESSION}" ]; then
 fi
 
 # Сохранить в Keychain
-"$SCRIPT_DIR/keychain-save-session.sh"
+security add-generic-password \
+    -a "${USER}" \
+    -s "bw-secrets-session" \
+    -w "${BW_SESSION}" \
+    -U
+echo "Session saved to Keychain"
 
 # Перезапустить демон
 launchctl kickstart -k "gui/$(id -u)/com.amcr.bw-secrets"

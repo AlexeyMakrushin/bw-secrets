@@ -4,9 +4,10 @@
 
 ## Зачем?
 
-- **Без .env файлов** — секреты не на диске, AI-агенты не прочитают случайно
+- **Без .env файлов** — секреты не на диске
 - **Быстро** — vault в памяти, не нужно каждый раз расшифровывать
 - **Просто** — `bw-get google password` вместо длинных команд bw
+- **Универсально** — работает с Docker, Python, Node, любым языком через direnv
 
 ## Быстрый старт
 
@@ -15,52 +16,50 @@
 cd ~/.secrets
 uv sync
 
-# 2. Настроить сервер
+# 2. Настроить сервер (для self-hosted)
 cp .env.example .env
-# Отредактировать BW_SERVER (для self-hosted)
+# Отредактировать BW_SERVER
 
 # 3. Добавить алиасы в .zshrc
 echo 'alias bw-unlock="~/.secrets/scripts/bw-unlock.sh"' >> ~/.zshrc
-echo 'alias bw-stop="pkill -f bw-secrets-daemon"' >> ~/.zshrc
 source ~/.zshrc
 
 # 4. Разблокировать и запустить демон
 bw-unlock
 
-# 5. Готово!
-.venv/bin/bw-list
+# 5. Проверить
+~/.secrets/.venv/bin/bw-list
 ```
 
-## Использование
+## Использование: direnv
 
-### В shell-скриптах
+Рекомендуемый способ — через direnv:
+
 ```bash
-PASSWORD=$(bw-get google password)
-API_KEY=$(bw-get openai api-key)
+# Установить direnv (один раз)
+brew install direnv
+echo 'eval "$(direnv hook zsh)"' >> ~/.zshrc
 ```
 
-### В Python
-```python
-from bw_secrets import get_secret
+В каждом проекте создать `.envrc`:
 
-api_key = get_secret("openai", "api-key")
-password = get_secret("google", "password")
-```
-
-### В Docker
 ```bash
-docker run \
-  -e OPENAI_API_KEY=$(bw-get openai api-key) \
-  -e DB_PASSWORD=$(bw-get postgres password) \
-  myapp
+export POSTGRES_PASSWORD=$(~/.secrets/.venv/bin/bw-get myapp password)
+export API_KEY=$(~/.secrets/.venv/bin/bw-get myapp api-key)
 ```
 
-### Посмотреть доступные поля
 ```bash
-bw-suggest google
-# Выведет:
-# GOOGLE_USERNAME=$(bw-get google username)
-# GOOGLE_PASSWORD=$(bw-get google password)
+direnv allow     # разрешить (один раз)
+cd project/      # переменные загружаются автоматически
+docker compose up
+```
+
+### В скриптах/cron
+
+```bash
+#!/bin/bash
+source /path/to/project/.envrc
+docker compose up -d
 ```
 
 ## CLI команды
@@ -71,9 +70,7 @@ bw-suggest google
 | `bw-list` | Список всех записей |
 | `bw-suggest <item>` | Показать все поля записи |
 | `bw-add <item> field=value ...` | Создать новую запись |
-| `bw-reload` | Перезагрузить vault (после добавления записей в Bitwarden) |
-| `bw-check [secrets.json]` | Проверить конфигурацию без вывода значений |
-| `bw-secrets-daemon` | Запустить демон |
+| `bw-reload` | Перезагрузить vault |
 
 ### Создание записи
 
@@ -99,48 +96,58 @@ BW_CLIENT_SECRET=xxx
 BW_PASSWORD=xxx
 ```
 
-Если `BW_CLIENT_ID` и `BW_CLIENT_SECRET` заданы — `bw-unlock` использует API key вместо интерактивного логина.
-
-Если `BW_PASSWORD` задан — unlock происходит без ввода пароля.
-
-### Shell алиасы
-
-Добавить в `.zshrc`:
-
-```bash
-alias bw-unlock='~/.secrets/scripts/bw-unlock.sh'
-alias bw-stop='pkill -f bw-secrets-daemon'
-```
-
-`bw-unlock` — настраивает сервер, разблокирует vault, сохраняет сессию в Keychain, перезапускает демон.
-
-## Автозапуск (macOS)
+## Автозапуск (macOS launchd)
 
 Чтобы демон запускался автоматически при логине:
 
 ```bash
-# 1. Сохранить сессию в Keychain
-export BW_SESSION=$(bw unlock --raw)
-./scripts/keychain-save-session.sh
-
-# 2. Установить launchd агент
+# Установить launchd агент
 ./scripts/install-launchd.sh
 ```
 
-Подробнее: [launchd/README.md](launchd/README.md)
+### Управление
+
+```bash
+# Статус
+launchctl list | grep bw-secrets
+
+# Логи
+tail -f /tmp/bw-secrets.err
+
+# Остановить
+launchctl unload ~/Library/LaunchAgents/com.amcr.bw-secrets.plist
+
+# Запустить
+launchctl load ~/Library/LaunchAgents/com.amcr.bw-secrets.plist
+```
+
+### Удаление
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.amcr.bw-secrets.plist
+rm ~/Library/LaunchAgents/com.amcr.bw-secrets.plist
+```
+
+### Обновление сессии
+
+Если сессия истекла:
+
+```bash
+bw-unlock
+```
 
 ## Требования
 
 - Python >= 3.11
 - [uv](https://github.com/astral-sh/uv) — менеджер пакетов
 - [bitwarden-cli](https://bitwarden.com/help/cli/) — `brew install bitwarden-cli`
+- [direnv](https://direnv.net/) — `brew install direnv` (опционально)
 
 ## Безопасность
 
 - Секреты хранятся только в RAM, не на диске
 - Unix socket с правами 600 (только владелец)
 - BW_SESSION в macOS Keychain (зашифрован)
-- Инструкции для AI-агентов в [AGENTS.md](AGENTS.md)
 
 ## Структура
 
@@ -149,7 +156,5 @@ export BW_SESSION=$(bw unlock --raw)
 ├── src/bw_secrets/     # Python пакет
 ├── scripts/            # Shell-скрипты
 ├── launchd/            # Автозапуск macOS
-├── pyproject.toml
-├── AGENTS.md           # Инструкции для AI
-└── README.md
+└── pyproject.toml
 ```

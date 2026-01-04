@@ -34,3 +34,4 @@ ENV/
 .env
 tmp/
 backup/
+.claude/

@@ -17,9 +17,7 @@ if ! security find-generic-password -a "${USER}" -s "bw-secrets-session" -w >/de
     echo ""
     echo "ERROR: BW_SESSION not found in Keychain"
     echo ""
-    echo "First run:"
-    echo "  export BW_SESSION=\$(bw unlock --raw)"
-    echo "  $SCRIPT_DIR/keychain-save-session.sh"
+    echo "First run: bw-unlock"
     exit 1
 fi
 

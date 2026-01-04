@@ -1,6 +1,6 @@
 [project]
 name = "bw-secrets"
-version = "0.2.0"
+version = "0.3.0"
 requires-python = ">=3.11"
 dependencies = []
 
@@ -9,7 +9,6 @@ bw-get = "bw_secrets.cli:cmd_get"
 bw-suggest = "bw_secrets.cli:cmd_suggest"
 bw-reload = "bw_secrets.cli:cmd_reload"
 bw-list = "bw_secrets.cli:cmd_list"
-bw-check = "bw_secrets.cli:cmd_check"
 bw-add = "bw_secrets.cli:cmd_add"
 bw-secrets-daemon = "bw_secrets.daemon:main"
 

@@ -1,10 +1,33 @@
 import base64
 import json
 import os
+import socket
 import subprocess
 import sys
 
-from .client import send_command
+from . import SOCKET_PATH
+
+
+def send_command(command: str) -> str:
+    """Отправить команду демону через Unix socket."""
+    try:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.connect(SOCKET_PATH)
+        sock.sendall(f"{command}\n".encode())
+        response = sock.recv(65536).decode().strip()
+        sock.close()
+        return response
+    except FileNotFoundError:
+        print(f"ERROR: Socket not found: {SOCKET_PATH}", file=sys.stderr)
+        print("Run: bw-unlock", file=sys.stderr)
+        sys.exit(1)
+    except ConnectionRefusedError:
+        print(f"ERROR: Cannot connect to daemon", file=sys.stderr)
+        print("Run: bw-unlock", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 def get_project_dir() -> str:
@@ -126,57 +149,6 @@ def cmd_reload():
         print(response[3:])
     else:
         print(response, file=sys.stderr)
-        sys.exit(1)
-
-
-def cmd_check():
-    """CLI команда: bw-check [secrets.json]
-
-    Проверяет что все секреты из файла существуют.
-    НЕ выводит значения секретов.
-    """
-    path = sys.argv[1] if len(sys.argv) > 1 else "secrets.json"
-
-    try:
-        with open(path) as f:
-            secrets = json.load(f)
-    except FileNotFoundError:
-        print(f"ERROR: File not found: {path}", file=sys.stderr)
-        sys.exit(1)
-    except json.JSONDecodeError as e:
-        print(f"ERROR: Invalid JSON: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    all_ok = True
-    for var_name, config in secrets.items():
-        # Прямое значение — проверяем только что не пустое
-        if "value" in config:
-            if config["value"]:
-                print(f"✓ {var_name} (direct value)")
-            else:
-                print(f"✗ {var_name} (direct value) — EMPTY")
-                all_ok = False
-            continue
-
-        # Загрузка из Bitwarden
-        item = config.get("item")
-        if not item:
-            print(f"✗ {var_name} — no 'item' or 'value' specified")
-            all_ok = False
-            continue
-
-        field = config.get("field", "password")
-
-        # Проверяем существование через GET, но НЕ выводим значение
-        response = send_command(f"GET {item} {field}")
-
-        if response.startswith("OK "):
-            print(f"✓ {var_name} ({item}/{field})")
-        else:
-            print(f"✗ {var_name} ({item}/{field}) — NOT FOUND")
-            all_ok = False
-
-    if not all_ok:
         sys.exit(1)
 
 
