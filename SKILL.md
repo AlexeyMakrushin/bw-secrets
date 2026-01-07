@@ -21,7 +21,7 @@ If not installed, guide user to run:
 
 ```bash
 git clone https://github.com/AlexeyMakrushin/bw-secrets.git ~/.secrets
-cd ~/.secrets && ./scripts/setup.sh
+cd ~/.secrets && ./setup.sh
 ```
 
 Setup will automatically:
@@ -37,12 +37,13 @@ Setup will automatically:
 
 | Command | Description |
 |---------|-------------|
+| `bw-start` | Start daemon or reload cache |
+| `bw-stop` | Stop daemon |
+| `bw-status` | Show daemon status |
 | `bw-list` | List all vault entries |
-| `bw-suggest <item>` | Show all fields for an entry |
+| `bw-fields <item>` | Show all fields for an entry |
 | `bw-get <item> [field]` | Get secret value (default: password) |
 | `bw-add <item> field=value` | Create new Bitwarden entry |
-| `bw-reload` | Reload vault cache after changes |
-| `bw-unlock` | Re-unlock vault (if session expired) |
 
 ## Project Setup Workflow
 
@@ -55,7 +56,7 @@ When user needs secrets in a project, follow this workflow:
 bw-list | grep -i projectname
 
 # See available fields
-bw-suggest projectname
+bw-fields projectname
 
 # Create if not exists
 bw-add projectname password=xxx api-key=yyy
@@ -124,28 +125,26 @@ bw-add myapp password=xxx api-key=yyy client-id=zzz
 
 ## Troubleshooting
 
-### "Socket not found" or "Cannot connect"
+### "Socket not found" or "Session expired"
 ```bash
-bw-unlock
-```
-
-### "Session expired"
-```bash
-bw-unlock
+bw-start
 ```
 
 ### Entry not found after creation
 ```bash
-bw-reload
+bw-start  # reloads cache
 ```
 
 ### Daemon not running
 ```bash
+# Check status
+bw-status
+
 # Check logs
 tail -20 /tmp/bw-secrets.err
 
-# Restart (note: username is dynamic)
-launchctl kickstart -k gui/$(id -u)/com.$(whoami).bw-secrets
+# Restart
+bw-stop && bw-start
 ```
 
 ## Important Rules

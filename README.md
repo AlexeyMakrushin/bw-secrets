@@ -43,7 +43,7 @@ No `.env` files with secrets on disk. No passwords in your prompts. No trust req
 ```bash
 # Clone and run setup
 git clone https://github.com/AlexeyMakrushin/bw-secrets.git ~/.secrets
-cd ~/.secrets && ./scripts/setup.sh
+cd ~/.secrets && ./setup.sh
 ```
 
 The setup will:
@@ -106,12 +106,13 @@ PORT=8080
 
 | Command | Description |
 |---------|-------------|
+| `bw-start` | Start daemon or reload cache |
+| `bw-stop` | Stop daemon |
+| `bw-status` | Show daemon status |
 | `bw-list` | List all vault entries |
-| `bw-suggest <item>` | Show fields for an entry |
+| `bw-fields <item>` | Show fields for an entry |
 | `bw-get <item> [field]` | Get secret (default: password) |
 | `bw-add <item> key=value` | Create new entry |
-| `bw-reload` | Reload vault cache |
-| `bw-unlock` | Re-unlock vault |
 
 ### Examples
 
@@ -120,7 +121,7 @@ PORT=8080
 bw-list | grep -i postgres
 
 # See available fields
-bw-suggest myapp
+bw-fields myapp
 
 # Get specific field
 bw-get myapp api-key
@@ -174,23 +175,21 @@ BW_CLIENT_SECRET=xxx
 
 ## Troubleshooting
 
-### "Socket not found"
+### "Socket not found" or "Session expired"
 ```bash
-bw-unlock
-```
-
-### "Session expired"
-```bash
-bw-unlock
+bw-start
 ```
 
 ### Daemon not starting
 ```bash
+# Check status
+bw-status
+
 # Check logs
 tail -20 /tmp/bw-secrets.err
 
-# Restart daemon
-launchctl kickstart -k gui/$(id -u)/com.amcr.bw-secrets
+# Restart
+bw-stop && bw-start
 ```
 
 ## Security
@@ -204,12 +203,12 @@ launchctl kickstart -k gui/$(id -u)/com.amcr.bw-secrets
 
 ```
 ~/.secrets/
-├── scripts/
-│   ├── setup.sh          # One-command installation
-│   ├── bw-unlock.sh      # Unlock vault
-│   └── install-launchd.sh
-├── src/bw_secrets/       # Python package
-├── SKILL.md              # Claude Code skill
+├── setup.sh              # One-command installation
+├── bw_secrets/           # Python package
+│   ├── cli.py            # CLI commands
+│   ├── daemon.py         # Background service
+│   └── gui.py            # Login dialog
+├── SKILL.md              # AI assistant skill
 └── .env                  # Your server config
 ```
 

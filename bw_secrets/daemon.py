@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import signal
+import subprocess
 import sys
 
 from . import SOCKET_PATH
@@ -9,6 +10,49 @@ from .bitwarden import get_session, load_vault
 
 
 vault: dict = {}
+REFRESH_INTERVAL = 3600  # 1 hour in seconds
+
+
+def keychain_get(service: str) -> str | None:
+    """Get value from macOS Keychain."""
+    try:
+        result = subprocess.run(
+            ["security", "find-generic-password", "-a", os.environ.get("USER", ""),
+             "-s", service, "-w"],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+
+def bw_sync_and_reload(password: str) -> dict | None:
+    """Sync vault and reload items using password."""
+    try:
+        # Unlock to get fresh session
+        env = os.environ.copy()
+        env["BW_PASSWORD"] = password
+        result = subprocess.run(
+            ["bw", "unlock", "--passwordenv", "BW_PASSWORD", "--raw"],
+            capture_output=True, text=True, timeout=60, env=env
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+
+        session = result.stdout.strip()
+
+        # Sync vault
+        subprocess.run(
+            ["bw", "sync", "--session", session],
+            capture_output=True, timeout=60
+        )
+
+        # Reload vault
+        return load_vault(session)
+    except Exception:
+        return None
 
 
 def to_env_name(s: str) -> str:
@@ -99,6 +143,28 @@ def process_request(request: str) -> str:
     return f"ERROR unknown command: {cmd}"
 
 
+async def auto_refresh():
+    """Background task: refresh vault every hour using Keychain password."""
+    global vault
+
+    while True:
+        await asyncio.sleep(REFRESH_INTERVAL)
+
+        password = keychain_get("bw-secrets-master")
+        if not password:
+            print("Auto-refresh: no password in Keychain, skipping")
+            continue
+
+        print("Auto-refresh: syncing vault...")
+        new_vault = bw_sync_and_reload(password)
+
+        if new_vault:
+            vault = new_vault
+            print(f"Auto-refresh: reloaded {len(vault)} items")
+        else:
+            print("Auto-refresh: failed to reload (password may have changed)")
+
+
 async def run_server():
     """Запустить Unix socket сервер."""
     global vault
@@ -122,6 +188,7 @@ async def run_server():
     os.chmod(SOCKET_PATH, 0o600)
 
     print(f"Listening on {SOCKET_PATH}")
+    print(f"Auto-refresh every {REFRESH_INTERVAL // 60} minutes")
 
     # Обработка сигналов для graceful shutdown
     def handle_signal(signum, frame):
@@ -132,6 +199,9 @@ async def run_server():
 
     signal.signal(signal.SIGTERM, handle_signal)
     signal.signal(signal.SIGINT, handle_signal)
+
+    # Start auto-refresh background task
+    asyncio.create_task(auto_refresh())
 
     async with server:
         await server.serve_forever()

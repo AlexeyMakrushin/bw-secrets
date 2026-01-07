@@ -5,13 +5,24 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]
+# Main commands
+bw-start = "bw_secrets.cli:cmd_start"
+bw-stop = "bw_secrets.cli:cmd_stop"
+bw-status = "bw_secrets.cli:cmd_status"
 bw-get = "bw_secrets.cli:cmd_get"
-bw-suggest = "bw_secrets.cli:cmd_suggest"
-bw-reload = "bw_secrets.cli:cmd_reload"
 bw-list = "bw_secrets.cli:cmd_list"
 bw-add = "bw_secrets.cli:cmd_add"
+bw-fields = "bw_secrets.cli:cmd_fields"
+# Internal
+bw-launch = "bw_secrets.cli:cmd_launch"
 bw-secrets-daemon = "bw_secrets.daemon:main"
+# Deprecated
+bw-suggest = "bw_secrets.cli:cmd_suggest"
+bw-reload = "bw_secrets.cli:cmd_reload"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["bw_secrets"]
